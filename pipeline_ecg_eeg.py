@@ -66,17 +66,17 @@ plt.ylim([0, 5])
 plt.ylabel("Loss")
 plt.xlabel("Training batches (100 ex per batch)")
 plt.legend()
-plt.show()
+#plt.show()
 
 # Accessing training and validation accuracy
 m1_train_acc = solver.train_acc_history
 m1_val_acc = solver.val_acc_history
 #############################################################################
 # Define hyperparameters to test
-hidden_dim_options = [[500], [1000], [500, 250]]  # Example hidden dimensions
-reg_options = [1e-4, 1e-3, 1e-2]  # Regularization strengths
-mean_options = [0, 0.5, 1]  # Example mean values for target means
-var_options = [0.5, 1, 2]  # Example values for target variances
+hidden_dim_options = [[500], [1000], [500, 250]]
+reg_options = [1e-4, 1e-3, 1e-2]
+mean_options = [np.mean(X_train), 0, 0.5, 1]
+var_options = [np.var(X_train), 0.5, 1, 2]
 
 # Store results and track the best model
 results = {}
@@ -88,8 +88,19 @@ for hidden_dims in hidden_dim_options:
     for reg in reg_options:
         for mean_val in mean_options:
             for var_val in var_options:
-                # [Model initialization and training code]
-
+                model = TargetNormModel(hidden_dims, mean_val, var_val, input_dim, num_classes, reg)
+                solver = Solver(model, ecg_data,
+                                num_epochs=10, batch_size=100,
+                                task_update_rule=sgd,
+                                tn_update_rule=tn_sgd,
+                                optim_config={
+                                    'task_learning_rate': 1e-3,
+                                    'mean_learning_rate': 1e-5,
+                                    'var_learning_rate': 1e-5,
+                                },
+                                print_every=10,
+                                verbose=True)
+                solver.train()
                 # Check if the current model is the best one
                 current_val_acc = np.max(solver.val_acc_history)
                 if current_val_acc > best_val_acc:
@@ -105,7 +116,7 @@ for hidden_dims in hidden_dim_options:
                 }
 
 # Save the best model to a file
-torch.save(best_model.state_dict(), 'best_model.pth')
+ #torch.save(best_model.state_dict(), 'best_model.pth')
 
 # Print the best model parameters and accuracy
 print(f"Best Model Parameters: Hidden Dims: {best_model_params[0]}, Reg: {best_model_params[1]}, "
