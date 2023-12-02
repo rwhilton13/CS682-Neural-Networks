@@ -13,18 +13,20 @@ from torch import save
 data_folder = "data/ecg_heartbeat_kaggle"
 X_train, y_train, X_test, y_test = data_utils.load_ecg_data(data_folder)
 
-# Preprocess the entire dataset
-preprocessed_X_train = data_utils.preprocess_ecg(X_train)
-preprocessed_X_test = data_utils.preprocess_ecg(X_test)
-
 # Split a portion of the training data for validation
 X_train, X_val, y_train, y_val = train_test_split(preprocessed_X_train, y_train, test_size=0.2, random_state=42)
 
+# Preprocess the entire dataset
+preprocessed_X_train = data_utils.preprocess_ecg(X_train)
+preprocessed_X_val = data_utils.preprocess_ecg(X_val)
+preprocessed_X_test = data_utils.preprocess_ecg(X_test)
+
+
 # Construct the ecg_data object for the solver
 ecg_data = {
-    'X_train': X_train,
+    'X_train': preprocessed_X_train,
     'y_train': y_train,
-    'X_val': X_val,
+    'X_val': preprocessed_X_val,
     'y_val': y_val,
     'X_test': preprocessed_X_test,
     'y_test': y_test
