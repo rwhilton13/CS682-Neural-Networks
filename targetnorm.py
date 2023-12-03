@@ -25,6 +25,10 @@ def sum_tn_loss_history(loss_history):
     return total_mean_loss_history, total_var_loss_history
 
 
+def get_cnn_feature_dims(input_size, kernel_size, stride, padding):
+    return int((input_size - kernel_size + 2 * padding) / stride + 1)
+
+
 class TargetNorm(nn.Module):
     def __init__(self, layer, layer_name, targets):
         super(TargetNorm, self).__init__()
