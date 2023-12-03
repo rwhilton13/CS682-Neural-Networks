@@ -60,7 +60,6 @@ plt.xlabel("Training batches (100 ex per batch)")
 # plt.title("Task learning rate (1e-3), Mean learning rate (1e-2), Variance learning rate (1e-5)")
 plt.legend()
 
-
 # plot individual tn losses
 plt.plot(solver.tn_loss_history["targetnorm1"]["mean"], label="Target mean loss layer 1")
 plt.plot(solver.tn_loss_history["targetnorm1"]["var"], label="Target variance loss layer 1")
@@ -71,3 +70,42 @@ plt.ylabel("Loss")
 plt.xlabel("Training batches (100 ex per batch)")
 # plt.title("Task learning rate (1e-3), Mean learning rate (1e-2), Variance learning rate (1e-5)")
 plt.legend()
+
+"""
+CNN model with target normalization
+"""
+conv1 = nn.Conv2d(3, 32, kernel_size=7, stride=1, padding=3)
+t1_dim = get_cnn_feature_dims(32, 7, 1, 3)
+targets1 = {"means": torch.zeros(32, t1_dim, t1_dim), "vars": torch.ones(32, t1_dim, t1_dim)}
+conv2 = nn.Conv2d(32, 64, kernel_size=7, stride=1, padding=3)
+t2_dim = get_cnn_feature_dims(32, 7, 1, 3)
+targets2 = {"means": torch.zeros(64, t2_dim, t2_dim), "vars": torch.ones(64, t2_dim, t2_dim)}
+lin1 = nn.Linear(64 * 32 * 32, 100)
+targets3 = {"means": torch.zeros(100), "vars": torch.ones(100)}
+lin2 = nn.Linear(100, 10)
+
+cnn_model = nn.Sequential(OrderedDict([
+    ("conv1", conv1),
+    ("targetnorm1", TargetNorm(conv1, "conv1", targets1)),
+    ("relu1", nn.ReLU()),
+    ("conv2", conv2),
+    ("targetnorm2", TargetNorm(conv2, "conv2", targets2)),
+    ("relu2", nn.ReLU()),
+    ("flatten", nn.Flatten(1, -1)),
+    ("lin1", lin1),
+    ("targetnorm3", TargetNorm(lin1, "lin1", targets3)),
+    ("relu3", nn.ReLU()),
+    ("decoder", lin2)
+]))
+
+cnn_solver = TargetNormSolver(cnn_model, data,
+                              num_epochs=10, batch_size=100,
+                              learning_rates={
+                                  'task_lr': 1e-3,
+                                  'mean_lr': 1e-5,
+                                  'var_lr': 1e-5,
+                              },
+                              print_every=10,
+                              verbose=True)
+
+cnn_solver.train()
