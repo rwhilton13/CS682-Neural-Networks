@@ -9,35 +9,39 @@ from matplotlib.gridspec import GridSpec
 from sklearn.model_selection import train_test_split
 from torch import save
 
+#############################################################################
+### ECG ###
+#############################################################################
+"""
+ECG Load and Preprocess
+"""
 # Load ECG data
 data_folder = "data/ecg_heartbeat_kaggle"
 X_train, y_train, X_test, y_test = data_utils.load_ecg_data(data_folder)
 
+# Preprocess the entire dataset
+preprocessed_X_train = data_utils.preprocess_ecg(X_train)
+preprocessed_X_test = data_utils.preprocess_ecg(X_test)
+
 # Split a portion of the training data for validation
 X_train, X_val, y_train, y_val = train_test_split(preprocessed_X_train, y_train, test_size=0.2, random_state=42)
 
-# Preprocess the entire dataset
-preprocessed_X_train = data_utils.preprocess_ecg(X_train)
-preprocessed_X_val = data_utils.preprocess_ecg(X_val)
-preprocessed_X_test = data_utils.preprocess_ecg(X_test)
-
-
 # Construct the ecg_data object for the solver
 ecg_data = {
-    'X_train': preprocessed_X_train,
+    'X_train': X_train,
     'y_train': y_train,
-    'X_val': preprocessed_X_val,
+    'X_val': X_val,
     'y_val': y_val,
     'X_test': preprocessed_X_test,
     'y_test': y_test
 }
 
 # Optional: Plot to confirm preprocessing
-sample_index = 0  # Change this to look at different samples
-data_utils.preprocess_and_plot_ecg(X_train, sample_index)
+#sample_index = 0  # Change this to look at different samples
+#data_utils.preprocess_and_plot_ecg(X_train, sample_index)
 
 """
-ECG Model 1
+ECG Model 1 test
 """
 hidden_dims = [500]
 target_means = [np.zeros(hidden_dim) for hidden_dim in hidden_dims]
@@ -61,19 +65,22 @@ solver = Solver(model, ecg_data,
 solver.train()
 
 # Plotting the training information
-plt.plot(solver.loss_history, label="Task loss")
+'''plt.plot(solver.loss_history, label="Task loss")
 plt.plot(solver.tn_loss_history["mean"], label="Target mean loss")
 plt.plot(solver.tn_loss_history["var"], label="Target variance loss")
 plt.ylim([0, 5])
 plt.ylabel("Loss")
 plt.xlabel("Training batches (100 ex per batch)")
 plt.legend()
-#plt.show()
+plt.show()'''
 
 # Accessing training and validation accuracy
 m1_train_acc = solver.train_acc_history
 m1_val_acc = solver.val_acc_history
-#############################################################################
+
+"""
+ECG tune
+"""
 # Define hyperparameters to test
 hidden_dim_options = [[500], [1000], [500, 250]]
 reg_options = [1e-4, 1e-3, 1e-2]
@@ -90,7 +97,9 @@ for hidden_dims in hidden_dim_options:
     for reg in reg_options:
         for mean_val in mean_options:
             for var_val in var_options:
-                model = TargetNormModel(hidden_dims, mean_val, var_val, input_dim, num_classes, reg)
+                target_means = [np.full(hidden_dim, mean_val) for hidden_dim in hidden_dims]
+                target_vars = [np.full(hidden_dim, var_val) for hidden_dim in hidden_dims]
+                model = TargetNormModel(hidden_dims, target_means, target_vars, input_dim, num_classes, reg)
                 solver = Solver(model, ecg_data,
                                 num_epochs=10, batch_size=100,
                                 task_update_rule=sgd,
@@ -118,7 +127,7 @@ for hidden_dims in hidden_dim_options:
                 }
 
 # Save the best model to a file
- #torch.save(best_model.state_dict(), 'best_model.pth')
+#torch.save(best_model.state_dict(), 'best_model.pth')
 
 # Print the best model parameters and accuracy
 print(f"Best Model Parameters: Hidden Dims: {best_model_params[0]}, Reg: {best_model_params[1]}, "
@@ -139,3 +148,28 @@ plt.legend()
 plt.title("Training and Validation Accuracy under Different Hyperparameters")
 plt.show()
 
+#############################################################################
+### EEG ###
+#############################################################################
+"""
+EEG Load and Preprocess
+"""
+# Load EEG data
+data_folder = "data/eeg_UCI/eeg_full"
+X_train, y_train, X_val, y_val, X_test, y_test = data_utils.load_ecg_data(data_folder)
+
+# Construct the eeg_data object for the solver
+eeg_data = {
+    'X_train': X_train,
+    'y_train': y_train,
+    'X_val': X_val,
+    'y_val': y_val,
+    'X_test': preprocessed_X_test,
+    'y_test': y_test
+}
+
+# Preprocess normalize, baseline correct, filtering
+preprocessed_eeg_data = data_utils.preprocess_eeg_data(eeg_data, lowcut=0.1, highcut=30, fs=256, baseline_idx=range(0, 10))
+
+# Optional plot to compare before/after preprocessing
+data_utils.plot_sample_comparison(eeg_data, preprocessed_eeg_data, trial_index=0, channel_index=0)
