@@ -3,14 +3,14 @@ from __future__ import print_function
 from builtins import range
 # from six.moves import cPickle as pickle
 import pickle
+import torch
 import numpy as np
 import os
 import platform
 from imageio import imread
 import pandas as pd
-from scipy.signal import butter, filtfilt
+from scipy.signal import butter, filtfilt, iirnotch
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
 import matplotlib.pyplot as plt
 
 def load_CIFAR_batch(filename):
@@ -265,6 +265,7 @@ def load_ecg_data(data_folder):
     train_path = os.path.join(data_folder, 'mitbih_train.csv')
     test_path = os.path.join(data_folder, 'mitbih_test.csv')
 
+    # Read the data from CSV files
     train_data = pd.read_csv(train_path, header=None)
     test_data = pd.read_csv(test_path, header=None)
 
@@ -274,27 +275,23 @@ def load_ecg_data(data_folder):
     X_test = test_data.iloc[:, :-1].values
     y_test = test_data.iloc[:, -1].values
 
+    # Convert labels to integer type
     y_train = y_train.astype(int)
     y_test = y_test.astype(int)
 
-    return X_train, y_train, X_test, y_test
+    # Convert data to PyTorch tensors
+    X_train = torch.tensor(X_train).to(torch.float32)
+    y_train = torch.tensor(y_train).to(torch.long)
+    X_test = torch.tensor(X_test).to(torch.float32)
+    y_test = torch.tensor(y_test).to(torch.long)
 
-# For testing its always a good idea to create a mini dataset
-def create_mini_ecg(X_train, y_train, num_samples_per_class=100):
-    unique_classes = np.unique(y_train)
-    mini_X, mini_y = [], []
+    # Split a portion of the training data for validation
+    X_train, X_val, y_train, y_val = train_test_split(X_train, y_train, test_size=0.2, random_state=42)
 
-    for class_label in unique_classes:
-        # Extracting samples for each class
-        class_indices = np.where(y_train == class_label)[0]
-        sampled_indices = np.random.choice(class_indices, num_samples_per_class, replace=False)
-        mini_X.extend(X_train[sampled_indices])
-        mini_y.extend(y_train[sampled_indices])
+    return X_train, X_val, y_train, y_val, X_test, y_test
 
-    return np.array(mini_X), np.array(mini_y)
-
-# Functions to preprocess ECG data
-# first is a set of bandwith filters
+# Preprocess ECG
+# Define the filter functions
 def butter_lowpass(cutoff, fs, order=5):
     nyq = 0.5 * fs
     normal_cutoff = cutoff / nyq
@@ -307,148 +304,124 @@ def butter_highpass(cutoff, fs, order=5):
     b, a = butter(order, normal_cutoff, btype='high', analog=False)
     return b, a
 
-def preprocess_ecg(data, fs=125, lowpass_cutoff=40, highpass_cutoff=0.5):
-    # Apply low-pass filter
-    b, a = butter_lowpass(lowpass_cutoff, fs)
-    data = filtfilt(b, a, data, axis=1)
+def preprocess_ecg(ecg_data, fs=125, lowpass_cutoff=40, highpass_cutoff=0.5, plot_sample_index=None):
+    # Function to apply filters and normalization
+    def process_data(data):
+        # Convert PyTorch tensor to NumPy array for filtering
+        np_data = data.numpy()
 
-    # Apply high-pass filter
-    b, a = butter_highpass(highpass_cutoff, fs)
-    data = filtfilt(b, a, data, axis=1)
+        # Apply low-pass filter
+        b, a = butter_lowpass(lowpass_cutoff, fs)
+        np_data = filtfilt(b, a, np_data, axis=1)
 
-    # Normalization
-    data = 2 * ((data - np.min(data)) / (np.max(data) - np.min(data))) - 1
+        # Apply high-pass filter
+        b, a = butter_highpass(highpass_cutoff, fs)
+        np_data = filtfilt(b, a, np_data, axis=1)
 
-    return data
+        # Normalization
+        np_data = 2 * ((np_data - np.min(np_data)) / (np.max(np_data) - np.min(np_data))) - 1
 
-def preprocess_and_plot_ecg(data, sample_index=0, fs=125, lowpass_cutoff=40, highpass_cutoff=0.5):
-    # Original Data
-    original_data = data[sample_index]
+        return torch.tensor(np_data, dtype=torch.float32)
 
-    # Apply low-pass filter
-    b, a = butter_lowpass(lowpass_cutoff, fs)
-    low_passed_data = filtfilt(b, a, original_data)
+    # Process all datasets
+    for key in ['X_train', 'X_val', 'X_test']:
+        ecg_data[key] = process_data(ecg_data[key])
 
-    # Apply high-pass filter
-    b, a = butter_highpass(highpass_cutoff, fs)
-    filtered_data = filtfilt(b, a, low_passed_data)
+    # Plotting, if a sample index is provided
+    if plot_sample_index is not None:
+        original_data = ecg_data['X_train'][plot_sample_index].numpy()
+        processed_data = process_data(ecg_data['X_train'][plot_sample_index].unsqueeze(0)).squeeze(0).numpy()
 
-    # Normalization
-    normalized_data = 2 * ((filtered_data - np.min(filtered_data)) / (np.max(filtered_data) - np.min(filtered_data))) - 1
+        plt.figure(figsize=(15, 5))
+        titles = ['Original Data', 'Filtered and Normalized Data']
+        for i, data in enumerate([original_data, processed_data]):
+            plt.subplot(1, 2, i+1)
+            plt.plot(data)
+            plt.title(titles[i])
+            plt.xlabel('Sample')
+            plt.ylabel('Amplitude')
+        plt.tight_layout()
+        plt.show()
 
-    # Plotting
-    plt.figure(figsize=(15, 5))
+    return ecg_data
 
-    plt.subplot(1, 3, 1)
-    plt.plot(original_data)
-    plt.title('Original Data')
-    plt.xlabel('Sample')
-    plt.ylabel('Amplitude')
+def load_emg_data(folder_path):
+    all_data = []
+    all_labels = []
 
-    plt.subplot(1, 3, 2)
-    plt.plot(filtered_data)
-    plt.title('Filtered Data')
-    plt.xlabel('Sample')
+    # Iterate through each subject's folder
+    for subject_folder in sorted(os.listdir(folder_path)):
+        subject_path = os.path.join(folder_path, subject_folder)
+        if os.path.isdir(subject_path):
+            # Iterate through each series file in the subject's folder
+            for file_name in sorted(os.listdir(subject_path)):
+                file_path = os.path.join(subject_path, file_name)
+                # Read the file
+                df = pd.read_csv(file_path, sep='\t')
+                # Append the data and labels
+                all_data.append(df.iloc[:, 1:9].values)  # Channels 1-8
+                all_labels.append(df.iloc[:, 9].values)  # Class labels
 
-    plt.subplot(1, 3, 3)
-    plt.plot(normalized_data)
-    plt.title('Normalized Data')
-    plt.xlabel('Sample')
+    # Combine data from all subjects
+    data = np.concatenate(all_data, axis=0)
+    labels = np.concatenate(all_labels, axis=0)
 
-    plt.tight_layout()
-    plt.show()
-
-    return normalized_data
-
-# Function to read in EEG data (UCI EEG database)
-def process_eeg_data(file_path):
-    # Initialize lists to store data and labels
-    data = []
-    labels = []
-
-    # Iterate over each file in the directory
-    for filename in os.listdir(file_path):
-        with open(os.path.join(file_path, filename), 'r') as file:
-            lines = file.readlines()
-
-            # Parse the header to determine the label
-            subject_type = lines[0].split()[0][3]
-            label = 1 if subject_type == 'a' else 0  # 1 for alcoholic, 0 for control
-
-            # Extract sensor data
-            sensor_data = []
-            for line in lines[5:]:  # Data starts from line 5
-                _, _, _, value = line.split()
-                sensor_data.append(float(value))
-            
-            # Add to data lists
-            data.append(sensor_data)
-            labels.append(label)
-
-    # Convert to numpy arrays
-    data = np.array(data)
-    labels = np.array(labels)
+    # Convert to PyTorch tensors
+    data = torch.tensor(data, dtype=torch.float32)
+    labels = torch.tensor(labels, dtype=torch.long)
 
     # Split the data into training, validation, and test sets
     X_train, X_temp, y_train, y_temp = train_test_split(data, labels, test_size=0.4, random_state=42)
     X_val, X_test, y_val, y_test = train_test_split(X_temp, y_temp, test_size=0.5, random_state=42)
 
-    return X_train, y_train, X_val, y_val, X_test, y_test
+    return X_train, X_val, y_train, y_val, X_test, y_test
 
-# Preprocess EEG
-def butter_bandpass(lowcut, highcut, fs, order=5):
-    nyq = 0.5 * fs
-    low = lowcut / nyq
-    high = highcut / nyq
-    b, a = butter(order, [low, high], btype='band')
-    return b, a
+# EMG preprocess
+def preprocess_emg(emg_data, plot_sample_index=None):
 
-def bandpass_filter(data, lowcut, highcut, fs, order=5):
-    b, a = butter_bandpass(lowcut, highcut, fs, order=order)
-    y = filtfilt(b, a, data, axis=1)
-    return y
+    def rectify(data):
+        return np.abs(data)
 
-def preprocess_eeg_data(eeg_data, lowcut, highcut, fs, baseline_idx):
-    scaler = StandardScaler()
+    def smooth(data, window_size=10):
+        return np.convolve(data, np.ones(window_size) / window_size, mode='same')
 
+    def normalize(data):
+        return (data - np.min(data)) / (np.max(data) - np.min(data))
+
+    # Preprocess all datasets
     for key in ['X_train', 'X_val', 'X_test']:
-        # Apply bandpass filter
-        eeg_data[key] = bandpass_filter(eeg_data[key], lowcut, highcut, fs, order=5)
+        data = emg_data[key]
 
-        # Baseline correction
-        baseline = np.mean(eeg_data[key][:, :, baseline_idx], axis=2, keepdims=True)
-        eeg_data[key] -= baseline
+        # Rectify
+        data = rectify(data)
 
-        # Normalization - reshape for scaler and then reshape back to original dimensions
-        original_shape = eeg_data[key].shape
-        eeg_data[key] = scaler.fit_transform(eeg_data[key].reshape(-1, original_shape[-1])).reshape(original_shape)
+        # Smoothing
+        data = np.apply_along_axis(smooth, 1, data)
 
-    return eeg_data
+        # Normalization
+        data = normalize(data)
 
-import matplotlib.pyplot as plt
+        emg_data[key] = data
 
-def plot_sample_comparison(original_data, preprocessed_data, trial_index, channel_index):
-    #Plots a single sample of EEG data before and after preprocessing.
+    # Plot comparison, if specified
+    if plot_sample_index is not None:
+        original_sample = emg_data['X_train'][plot_sample_index]
+        preprocessed_sample = emg_data['X_train'][plot_sample_index]
 
-    # Extract the specific trial and channel data
-    original_sample = original_data[trial_index, :, channel_index]
-    preprocessed_sample = preprocessed_data[trial_index, :, channel_index]
+        plt.figure(figsize=(15, 5))
+        plt.subplot(1, 2, 1)
+        plt.plot(original_sample)
+        plt.title('Original Data')
+        plt.xlabel('Sample')
+        plt.ylabel('Amplitude')
 
-    # Create a plot with two subplots
-    fig, axs = plt.subplots(2, 1, figsize=(12, 6))
-    fig.suptitle(f'EEG Data Comparison for Trial {trial_index} and Channel {channel_index}')
+        plt.subplot(1, 2, 2)
+        plt.plot(preprocessed_sample)
+        plt.title('Preprocessed Data')
+        plt.xlabel('Sample')
 
-    # Plot original data
-    axs[0].plot(original_sample)
-    axs[0].set_title('Original Data')
-    axs[0].set_xlabel('Sample Number')
-    axs[0].set_ylabel('Amplitude (uV)')
+        plt.tight_layout()
+        plt.show()
 
-    # Plot preprocessed data
-    axs[1].plot(preprocessed_sample)
-    axs[1].set_title('Preprocessed Data')
-    axs[1].set_xlabel('Sample Number')
-    axs[1].set_ylabel('Amplitude (uV)')
+    return emg_data
 
-    plt.tight_layout(rect=[0, 0.03, 1, 0.95])
-    plt.show()

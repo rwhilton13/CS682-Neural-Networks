@@ -49,7 +49,7 @@ class TargetNorm(nn.Module):
         feature_map: (N, D)
         target_means: (D,)
         """
-        loss = self.target_loss_fn(feature_map.mean(dim=0), self.targets["means"])
+        loss = self.target_loss_fn(feature_map.mean(dim=0), self.targets["means"].type(torch.float32))
         # use torch.autograd.grad to compute the gradient of the loss with respect to the feature map
         grads = torch.autograd.grad(loss, self.layer.parameters(), retain_graph=True)
 
@@ -60,7 +60,7 @@ class TargetNorm(nn.Module):
         feature_map: (N, D)
         target_vars: (D,)
         """
-        loss = self.target_loss_fn(feature_map.var(dim=0), self.targets["vars"])
+        loss = self.target_loss_fn(feature_map.var(dim=0), self.targets["vars"].type(torch.float32))
         # use torch.autograd.grad to compute the gradient of the loss with respect to the feature map
         grads = torch.autograd.grad(loss, self.layer.parameters(), retain_graph=True)
 

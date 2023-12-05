@@ -146,3 +146,5 @@ def softmax_loss(x, y):
     dx /= N
     return loss, dx
 
+
+
