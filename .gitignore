@@ -1,0 +1,5 @@
+
+data/TCGA-PANCAN-HiSeq/data.csv
+data/TCGA-PANCAN-HiSeq/geneids.tsv
+data/TCGA-PANCAN-HiSeq/labels.csv
+data/TCGA-PANCAN-HiSeq/.DS_Store
