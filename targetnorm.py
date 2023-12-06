@@ -69,7 +69,7 @@ class TargetNorm(nn.Module):
     def forward(self, feature_map):
         mean_losses, mean_grads = self.mean_loss(feature_map)
         var_losses, var_grads = self.var_loss(feature_map)
-
+        
         self.mean_losses = mean_losses.detach().numpy()
         self.var_losses = var_losses.detach().numpy()
 

@@ -11,6 +11,8 @@ from imageio import imread
 import pandas as pd
 from scipy.signal import butter, filtfilt, iirnotch
 from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler, LabelEncoder
+from sklearn.utils import shuffle
 import matplotlib.pyplot as plt
 
 def load_CIFAR_batch(filename):
@@ -345,83 +347,48 @@ def preprocess_ecg(ecg_data, fs=125, lowpass_cutoff=40, highpass_cutoff=0.5, plo
 
     return ecg_data
 
-def load_emg_data(folder_path):
-    all_data = []
-    all_labels = []
+# First we need to add a function to read in our genomics data
+# This collection of data is part of the RNA-Seq (HiSeq) PANCAN data set, 
+# it is a random extraction of gene expressions of patients having different 
+# types of tumor: BRCA, KIRC, COAD, LUAD and PRAD
 
-    # Iterate through each subject's folder
-    for subject_folder in sorted(os.listdir(folder_path)):
-        subject_path = os.path.join(folder_path, subject_folder)
-        if os.path.isdir(subject_path):
-            # Iterate through each series file in the subject's folder
-            for file_name in sorted(os.listdir(subject_path)):
-                file_path = os.path.join(subject_path, file_name)
-                # Read the file
-                df = pd.read_csv(file_path, sep='\t')
-                # Append the data and labels
-                all_data.append(df.iloc[:, 1:9].values)  # Channels 1-8
-                all_labels.append(df.iloc[:, 9].values)  # Class labels
+def process_gene_expression_data(data_path, labels_path):
+    # Read the full data and labels
+    data_df = pd.read_csv(data_path, index_col=0)
+    labels_df = pd.read_csv(labels_path)
 
-    # Combine data from all subjects
-    data = np.concatenate(all_data, axis=0)
-    labels = np.concatenate(all_labels, axis=0)
+    # Check if sample names match in both files
+    if not np.array_equal(data_df.index, labels_df['Sample']):
+        raise ValueError("Sample names in data and labels do not match")
 
-    # Convert to PyTorch tensors
-    data = torch.tensor(data, dtype=torch.float32)
-    labels = torch.tensor(labels, dtype=torch.long)
+    # Drop the sample names column from labels
+    labels_df.drop(columns=['Sample'], inplace=True)
+
+    # Encode the labels numerically
+    le = LabelEncoder()
+    labels_encoded = le.fit_transform(labels_df['Class'])
+
+    # Normalize the data
+    scaler = StandardScaler()
+    data_normalized = scaler.fit_transform(data_df)
+
+    # Shuffle data and labels together
+    data_normalized, labels_encoded = shuffle(data_normalized, labels_encoded, random_state=42)
+
 
     # Split the data into training, validation, and test sets
-    X_train, X_temp, y_train, y_temp = train_test_split(data, labels, test_size=0.4, random_state=42)
+    X_train, X_temp, y_train, y_temp = train_test_split(data_normalized, labels_encoded, test_size=0.4, random_state=42)
     X_val, X_test, y_val, y_test = train_test_split(X_temp, y_temp, test_size=0.5, random_state=42)
 
+    # Convert data to PyTorch tensors
+    import torch
+
+    # Assuming X_train, X_val, y_train, y_val, X_test, y_test are numpy arrays or lists
+    X_train = torch.tensor(X_train, dtype=torch.float32)
+    X_val = torch.tensor(X_val, dtype=torch.float32)
+    y_train = torch.tensor(y_train, dtype=torch.long)
+    y_val = torch.tensor(y_val, dtype=torch.long)
+    X_test = torch.tensor(X_test, dtype=torch.float32)
+    y_test = torch.tensor(y_test, dtype=torch.long)
+
     return X_train, X_val, y_train, y_val, X_test, y_test
-
-# EMG preprocess
-def preprocess_emg(emg_data, plot_sample_index=None):
-
-    def rectify(data):
-        return np.abs(data)
-
-    def smooth(data, window_size=10):
-        return np.convolve(data, np.ones(window_size) / window_size, mode='same')
-
-    def normalize(data):
-        return (data - np.min(data)) / (np.max(data) - np.min(data))
-
-    # Preprocess all datasets
-    for key in ['X_train', 'X_val', 'X_test']:
-        data = emg_data[key]
-
-        # Rectify
-        data = rectify(data)
-
-        # Smoothing
-        data = np.apply_along_axis(smooth, 1, data)
-
-        # Normalization
-        data = normalize(data)
-
-        emg_data[key] = data
-
-    # Plot comparison, if specified
-    if plot_sample_index is not None:
-        original_sample = emg_data['X_train'][plot_sample_index]
-        preprocessed_sample = emg_data['X_train'][plot_sample_index]
-
-        plt.figure(figsize=(15, 5))
-        plt.subplot(1, 2, 1)
-        plt.plot(original_sample)
-        plt.title('Original Data')
-        plt.xlabel('Sample')
-        plt.ylabel('Amplitude')
-
-        plt.subplot(1, 2, 2)
-        plt.plot(preprocessed_sample)
-        plt.title('Preprocessed Data')
-        plt.xlabel('Sample')
-
-        plt.tight_layout()
-        plt.show()
-
-    return emg_data
-
