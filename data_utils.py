@@ -375,20 +375,13 @@ def process_gene_expression_data(data_path, labels_path):
     # Shuffle data and labels together
     data_normalized, labels_encoded = shuffle(data_normalized, labels_encoded, random_state=42)
 
-
-    # Split the data into training, validation, and test sets
-    X_train, X_temp, y_train, y_temp = train_test_split(data_normalized, labels_encoded, test_size=0.4, random_state=42)
-    X_val, X_test, y_val, y_test = train_test_split(X_temp, y_temp, test_size=0.5, random_state=42)
+    # Split the data into training and validation sets (adjust test_size as needed)
+    X_train, X_val, y_train, y_val = train_test_split(data_normalized, labels_encoded, test_size=0.3, random_state=42)
 
     # Convert data to PyTorch tensors
-    import torch
-
-    # Assuming X_train, X_val, y_train, y_val, X_test, y_test are numpy arrays or lists
     X_train = torch.tensor(X_train, dtype=torch.float32)
     X_val = torch.tensor(X_val, dtype=torch.float32)
     y_train = torch.tensor(y_train, dtype=torch.long)
     y_val = torch.tensor(y_val, dtype=torch.long)
-    X_test = torch.tensor(X_test, dtype=torch.float32)
-    y_test = torch.tensor(y_test, dtype=torch.long)
 
-    return X_train, X_val, y_train, y_val, X_test, y_test
+    return X_train, X_val, y_train, y_val

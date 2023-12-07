@@ -1,4 +1,5 @@
 import torch
+import numpy as np
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
@@ -15,7 +16,7 @@ torch.set_default_dtype(torch.float32)
 # Load data (preprocess)
 data_path = 'data/TCGA-PANCAN-HiSeq/data.csv'
 labels_path = 'data/TCGA-PANCAN-HiSeq/labels.csv'
-X_train, X_val, y_train, y_val, X_test, y_test = data_utils.process_gene_expression_data(data_path, labels_path)
+X_train, X_val, y_train, y_val = data_utils.process_gene_expression_data(data_path, labels_path)
 
 # Construct the data object for the solver
 genomics_data = {
@@ -23,8 +24,6 @@ genomics_data = {
     'y_train': y_train,
     'X_val': X_val,
     'y_val': y_val,
-    'X_test': X_test,
-    'y_test': y_test
 }
 
 '''
@@ -153,7 +152,7 @@ importance_scores = permutation_importance(genomics_model, criterion, X_val_tens
 # Sort features by importance
 sorted_indices = torch.argsort(torch.tensor(importance_scores), descending=True)
 
-def extract_top_genes_per_class(model, X_val, y_val, sorted_indices, top_k=100):
+def extract_top_genes_per_class(model, X_val, y_val, sorted_indices, top_k=1000):
     model.eval()
     _, predictions = torch.max(model(X_val), 1)
     top_genes_per_class = {}
@@ -180,8 +179,8 @@ def extract_top_genes_per_class(model, X_val, y_val, sorted_indices, top_k=100):
 # Extract top genes for each class
 top_genes_per_class_bn = extract_top_genes_per_class(genomics_model, X_val_tensor, y_val_tensor, sorted_indices)
 # Print top_genes_per_class as needed
-for class_idx, genes in top_genes_per_class_bn.items():
-    print(f"Traditional BN Class {class_idx}: Top 100 Genes: {genes}")
+#for class_idx, genes in top_genes_per_class_bn.items():
+    #print(f"Traditional BN Class {class_idx}: Top 100 Genes: {genes}")
 
 
 
@@ -214,18 +213,9 @@ model = nn.Sequential(OrderedDict([
     ("decoder", lin3),
 ]))
 
-# Configure the solver
-genomics_data_processed = {
-    'X_train': X_train,
-    'y_train': y_train,
-    'X_val': X_val,
-    'y_val': y_val,
-    'X_test': X_test,
-    'y_test': y_test
-}
 
 reg = 0.0001  # Hyperparameter for regularization
-solver = TargetNormSolver(model, genomics_data_processed,
+solver = TargetNormSolver(model, genomics_data,
                           num_epochs=50, batch_size=200,
                           learning_rates={
                               'task_lr': 1e-4,
@@ -275,13 +265,10 @@ sorted_indices = torch.argsort(torch.tensor(importance_scores), descending=True)
 top_genes_per_class_tn = extract_top_genes_per_class(model, X_val, y_val, sorted_indices)
 
 # Print top_genes_per_class as needed
-for class_idx, genes in top_genes_per_class_tn.items():
-    print(f"TargetNorm Class {class_idx}: Top 100 Genes: {genes}")
-
-import matplotlib.pyplot as plt
+#for class_idx, genes in top_genes_per_class_tn.items():
+    #print(f"TargetNorm Class {class_idx}: Top 100 Genes: {genes}")
 
 # Compare top genes and plot
-
 # Function to calculate the overlap
 def calculate_overlap(set1, set2):
     return len(set(set1).intersection(set(set2)))

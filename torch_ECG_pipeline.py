@@ -64,7 +64,7 @@ model = nn.Sequential(OrderedDict([
 # Configure the solver
 reg = 0.0001  # Best hyperparameter for regularization
 solver = TargetNormSolver(model, ecg_data_processed,
-                          num_epochs=5, batch_size=25,
+                          num_epochs=20, batch_size=25,
                           learning_rates={
                               'task_lr': 1e-4,
                               'mean_lr': 1e-3,
@@ -218,11 +218,6 @@ end_time = time.time()
 batchnorm_test_time = end_time - start_time
 print(f"BatchNorm Model Test Accuracy: {test_accuracy:.2f}")
 print(f"BatchNorm Model Test Execution Time: {batchnorm_test_time:.2f} seconds")
-
-
-
-
-
 
 
 #############################################################################
